@@ -1,15 +1,11 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from ALP4 import *
-# import ALP4
 import time
 import imageio
-import glob
 import os
 import math_utils as mt
-import DMD_utilities as dmu
 import scipy.optimize as opt
-from sklearn.metrics import mean_squared_error
 import re
 import pickle
 import napari as nap
@@ -155,7 +151,7 @@ class dmd():
             # imageio.imwrite(save_dir + '\mask_' + str(i) + '.png', mask)
 
     def sequence_of_single_images(self, images: list=[], durations: list=[], repetitions: int=0):
-        """
+        """,c
         - images: list of numpy matrices uint8, with 255 or 0 (off/on) pixels
         - durations: list of display time for each image (in seconds)
         - repetitions: how many times to repeat the full list
@@ -175,36 +171,6 @@ class dmd():
         self.DMD.SetTiming()
         self.DMD.SeqPut(imgData = self.dark)
         self.DMD.Run(loop=True)
-
-    # def sequence_with_shift_update(self, images, durations, repetitions,
-    #                                start, xp_folder, camera, 
-    #                                cols=1024, rows=512):
-    #     # work in progress,
-    #     # finish in case the labview cannot compensate for drift
-    #     target = np.amax(mt.open_binary_stack(start, cols, rows), axis=0)
-    #     for i in range(repetitions):
-    #         for j in range(len(images)):
-    #             self.DMD.SeqAlloc(nbImg=1, bitDepth=1)
-    #             self.DMD.SeqControl(2104, 2106)
-    #             self.DMD.SetTiming()
-    #             self.DMD.SeqPut(imgData = images[j])
-    #             self.DMD.Run(loop=True)
-
-    #             if j%2 == 0:
-    #                 list_of_files = filter( os.path.isfile, glob.glob(xp_folder + '*' + camera + '*') )
-    #                 list_of_files = sorted( list_of_files, key=os.path.getmtime)
-    #                 moving = np.amax(mt.open_binary_stack(list_of_files[-2]), axis=0)
-    #                 correlation = mt.spatial_Xcorr_2D(moving, target)
-    #                 row_peak, col_peak = mt.xcorr_peak_2D(correlation)
-    #                 if row_peak > 2 or col_peak > 2:
-    #                     pass
-
-    #             time.sleep(durations[j])
-    #     self.DMD.SeqAlloc(nbImg=1, bitDepth=1)
-    #     self.DMD.SeqControl(2104, 2106)
-    #     self.DMD.SetTiming()
-    #     self.DMD.SeqPut(imgData = self.dark)
-    #     self.DMD.Run(loop=True)
 
     def close(self):
         self.idle()
@@ -310,8 +276,6 @@ class dmd():
 
         imageio.imwrite(output_name, DMD_mask_save)
         return DMD_mask
-
-
 
 
 def sequence_of_single_images(images, durations, repetitions):
