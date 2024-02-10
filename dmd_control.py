@@ -13,7 +13,7 @@ import napari as nap
 XP_FOLDER = r'D:\Data\Orb3b_ppk_72F11_ 57C10__Chronos-mVenus_Chronos-mVenus_Chronos-mVenus_rGeco-iRFP'
 TARGET_FOLDER = XP_FOLDER + r'\3_488_20230824_143022'
 GENERAL_PARAMETERS = 'D:\\DMD_transform_parameters\\DMD_parameters.pickled'
-PARAMETERS_FILENAME = r'/parameters.npz'
+PARAMETERS_FILENAME = r'/params.npz' #paramters
 
 class dmd():
 
@@ -34,10 +34,11 @@ class dmd():
 
         self.parameters = pickle.load(open(general_parameters_folder, 'rb'))
         self.ref_norm, self.norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
-        np.load(self.parameters['params_folder'] + '/params_2.npz', allow_pickle=True)['parameters_list']
+        np.load(self.parameters['params_folder'] + '/params.npz', allow_pickle=True)['parameters_list']
         
         # Keep a dark image as DEFAULT, so that laser is directed away from sample (for our current config)
-        self.dark = np.ones([self.DMD.nSizeY, self.DMD.nSizeX])*(2**8-1) # nSizeY is number of rows
+        self.dark = np.ones([self.DMD.nSizeY, self.DMD.nSizeX], dtype=np.uint8)*(2**8-1) # nSizeY is number of rows
+        print(type(self.dark))
         self.DMD.SeqAlloc(nbImg=1, bitDepth=1)
         self.DMD.SeqControl(2104, 2106) # from the API, these two numbers display a constant image
         self.DMD.SetTiming()
@@ -114,6 +115,7 @@ class dmd():
         return total
 
     def select_ROIs(self):
+        # perhaps add default arguments for image dimensions, so that any dimension could work
         """self.target_folder and self.xp_folder can be edited before this, accessing
         different acquisition without restarting the DMD"""
         target_stack = self.target_folder + '/SPC00_TM00001_ANG000_CM0_CHN00_PH0.stack' # this is a default naming convention
@@ -172,6 +174,38 @@ class dmd():
         self.DMD.SeqPut(imgData = self.dark)
         self.DMD.Run(loop=True)
 
+    def uploaded_sequence(self, images: list=[], durations: list=[], repetitions: int=0):
+        """,c
+        - images: list of numpy matrices uint8, with 255 or 0 (off/on) pixels
+        - durations: list of display time for each image (in seconds)
+        - repetitions: how many times to repeat the full list
+        """
+        assert len(images) == len(durations), \
+                            "Images and durations are lists with different lengths"
+        
+        self.DMD.SeqAlloc(nbImg=len(images), bitDepth=1)
+        self.DMD.SeqControl(2104, 2106)
+        self.DMD.SetTiming()
+        self.DMD.SeqPut(imgData = images[j])
+        self.DMD.Run(loop=True)
+        time.sleep(30)
+        self.DMD.Halt()
+
+
+        # for _ in range(repetitions):
+        #     for j in range(len(images)):
+        #         self.DMD.SeqAlloc(nbImg=1, bitDepth=1)
+        #         self.DMD.SeqControl(2104, 2106)
+        #         self.DMD.SetTiming()
+        #         self.DMD.SeqPut(imgData = images[j])
+        #         self.DMD.Run(loop=True)
+        #         time.sleep(durations[j])
+        self.DMD.SeqAlloc(nbImg=1, bitDepth=1)
+        self.DMD.SeqControl(2104, 2106)
+        self.DMD.SetTiming()
+        self.DMD.SeqPut(imgData = self.dark)
+        self.DMD.Run(loop=True)
+
     def close(self):
         self.idle()
         self.DMD.Halt()
@@ -192,7 +226,7 @@ class dmd():
         tops = [] # maxima
         for i in range(5):
             tops.append(np.unravel_index(np.argmax(calib), (calib.shape)))
-            calib = mt.cookiecutter(calib, tops[i], 10) # 10 pixels should beenoguh to get rid of the spot around each max
+            calib = mt.cookiecutter(calib, tops[i], 30) # 30 pixels should beenoguh to get rid of the spot around each max
         tops = np.asarray(tops)
         # center the point clouds around their center of mass
         camera, camera_center_x, camera_center_y = mt.center(tops) # experimental ponts
@@ -228,6 +262,7 @@ class dmd():
 
         rotation_matrix = np.array([[np.cos(np.pi/4 + theta), -np.sin(np.pi/4 + theta)],
                                     [np.sin(np.pi/4 + theta), np.cos(np.pi/4 + theta)]])
+        print(rotation_matrix)
         
         parameters_list = [ref_norm, norm, rotation_matrix, camera_center_x, camera_center_y, dmd_center_x, dmd_center_y]
 

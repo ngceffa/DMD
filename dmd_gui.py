@@ -181,7 +181,7 @@ class Movement(QMainWindow):
     #     self.thread = None
 
     def closeEvent(self, event):
-        question = QMessageBox.question(self, 'Going away?', '-.-', 
+        question = QMessageBox.question(self, 'Going away?', '  6(-_-)9', 
                                     QMessageBox.Yes | QMessageBox.No)
         event.ignore()
         if question == QMessageBox.Yes:
