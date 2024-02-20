@@ -208,7 +208,7 @@ class analogOut(object):
                      1, 2, 3, 4, 
                      1, 2, 3, 4] # four repetitions ofeach stimulus
         shuffle(full_list)
-        np.savetxt(SAVE_PATH + "/protocol.txt", full_list)
+        np.savetxt(SAVE_PATH + "/protocol_random.txt", full_list)
 
         total_signal = []
         for i in full_list:
