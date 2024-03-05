@@ -164,22 +164,22 @@ class analogOut(object):
         trigger_C = np.zeros((len(time)))
         trigger_D = np.zeros((len(time)))
 
-        signal_A[:samples_per_sec * 10] = V_max # on for 10 secs
+        signal_A[:samples_per_sec * 20] = V_max # on for 10 secs
         trigger_A[signal_A > 0] = 5.
 
-        signal_B[:samples_per_sec * 4] = np.linspace(V_min, V_max, samples_per_sec * 4)
-        signal_B[samples_per_sec * 4 : samples_per_sec * 6] = V_max
-        signal_B[samples_per_sec * 6 : samples_per_sec * 10] = np.linspace(V_max, V_min, samples_per_sec * 4)
+        signal_B[:samples_per_sec * 8] = np.linspace(V_min, V_max, samples_per_sec * 8)
+        signal_B[samples_per_sec * 8 : samples_per_sec * 12] = V_max
+        signal_B[samples_per_sec * 12 : samples_per_sec * 20] = np.linspace(V_max, V_min, samples_per_sec * 8)
         trigger_B[signal_B > 0] = 5.
 
-        signal_C[:samples_per_sec * 3] = np.linspace(V_min, V_max, samples_per_sec * 3)
-        signal_C[samples_per_sec * 3 : samples_per_sec * 7] = V_max
-        signal_C[samples_per_sec * 7 : samples_per_sec * 10] = np.linspace(V_max, V_min, samples_per_sec * 3)
+        signal_C[:samples_per_sec * 4] = np.linspace(V_min, V_max, samples_per_sec * 4)
+        signal_C[samples_per_sec * 4 : samples_per_sec * 16] = V_max
+        signal_C[samples_per_sec * 16: samples_per_sec * 20] = np.linspace(V_max, V_min, samples_per_sec * 4)
         trigger_C[signal_C > 0] = 5.
 
         signal_D[:samples_per_sec * 2] = np.linspace(V_min, V_max, samples_per_sec * 2)
-        signal_D[samples_per_sec * 2 : samples_per_sec * 8] = V_max
-        signal_D[samples_per_sec * 8 : samples_per_sec * 10] = np.linspace(V_max, V_min, samples_per_sec * 2)
+        signal_D[samples_per_sec * 2 : samples_per_sec * 18] = V_max
+        signal_D[samples_per_sec * 18 : samples_per_sec * 20] = np.linspace(V_max, V_min, samples_per_sec * 2)
         trigger_D[signal_D > 0] = 5.
 
         full_list = [1, 2, 3, 4, 
@@ -187,11 +187,19 @@ class analogOut(object):
                      1, 2, 3, 4, 
                      1, 2, 3, 4] # four repetitions of each stimulus
         shuffle(full_list)
-        np.savetxt(self.save_path + "/" + protocol_name + ".txt", full_list)
+
+        part = [1, 2, 3, 4]
+        total_shuf = []
+        for i in range(4):
+            shuffle(part)
+            total_shuf += part
+            part=[1, 2, 3, 4]
+        print(total_shuf)
+        np.savetxt(self.save_path + "/" + protocol_name + ".txt", total_shuf)
 
         total_signal = []
         total_trigger = []
-        for i in full_list:
+        for i in total_shuf:
             if i == 1:
                 total_signal.append(signal_A)
                 total_trigger.append(trigger_A)

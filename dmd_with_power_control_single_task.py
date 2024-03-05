@@ -233,6 +233,8 @@ class dmd():
             mask = np.zeros((self.target_proj.shape), dtype=np.uint16)
             for shape in self.viewer.layers[i].data:
                 mask[int(shape[0][0]):int(shape[2][0]), int(shape[0][1]):int(shape[2][1])] = 1
+            
+            imageio.imsave(self.save_dir + '\ROI_' + str(i) + '.png', mask)
 
             self.apply_affine(mask, self.save_dir + '\mask_' + str(i) + '.png' )
             self.rois.append(mask)
