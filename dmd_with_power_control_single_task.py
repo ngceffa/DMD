@@ -12,6 +12,7 @@ import napari as nap
 import laser_control_nidaqmx_single_task as daq
 import importlib
 importlib.reload(daq)
+importlib.reload(mt)
 
 XP_FOLDER = r'D:\Data\Orb3b_ppk_72F11_ 57C10__Chronos-mVenus_Chronos-mVenus_Chronos-mVenus_rGeco-iRFP'
 TARGET_FOLDER = XP_FOLDER + r'\3_488_20230824_143022'
@@ -42,6 +43,11 @@ class dmd():
         self.parameters = pickle.load(open(general_parameters_folder, 'rb'))
         self.ref_norm, self.norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
         np.load(self.parameters['params_folder'] + '/params.npz', allow_pickle=True)['parameters_list']
+
+        # self.ref_norm, self.norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
+        # np.load(r'C:\Users\Light Sheet User\Desktop\old_desktop\test_DMD'+ '/params.npz', allow_pickle=True)['parameters_list']
+
+        
         
         # Keep a dark image as DEFAULT, so that laser is directed away from sample (for our current config)
         self.dark = np.ones([self.DMD.nSizeY, self.DMD.nSizeX], dtype=np.uint8)*(2**8-1) # nSizeY is number of rows
@@ -53,6 +59,8 @@ class dmd():
 
         self.rows = self.DMD.nSizeY # defined just for convenience
         self.cols = self.DMD.nSizeX # defined just for convenience
+        self.hrows = int(self.rows/2)
+        self.hcols = int(self.cols/2)
         # Given DMD positioning, zeros pixels redirect light to the sample, ones (8-bit max) are dark.
         # Can change here, as well as the dark image in case the roles are reversed / the system geomtry changes:
         self.ON = 0
@@ -60,13 +68,31 @@ class dmd():
         # Define a default mask for calibration: few points, in non-symmetric pattern
         # -------------------------------------------------------------------------------------------------------
         # Define some points eyeballing their location. They must be NOT symmetric and at distinguishible heights.
-        delta = 3 # points size
+        delta = 1 # points size
+    
         self.calib_points = [[self.rows//2 + 120, self.cols//2 + 120],
                              [self.rows//2, self.cols//2],
                              [self.rows//2 + 180, self.cols//2 - 100],
                              [self.rows//2 - 170, self.cols//2],
                              [self.rows//2 - 0, self.cols//2 - 120]
                             ]
+        # self.calib_points = [[self.rows//2 + 120, self.cols//2 + 120],
+        #                      [self.rows//2, self.cols//2],
+        #                      [self.rows//2 + 300, self.cols//2 - 150],
+        #                      [self.rows//2 - 230, self.cols//2 + 180],
+        #                      [self.rows//2 - 0, self.cols//2 - 120]
+        #                     ]
+        self.calib_points_2 = [[200, 200], [200, 500], [200, 750], [200, 1100],
+                               [500, 200], [500, 500], [500, 750], [500, 1100],
+                               [750, 200], [750, 500], [750, 750], [750, 1100],
+                               [1100, 200], [1100, 500], [1100, 750], [1100, 1100]
+                               ]
+        # self.calib_points = [[self.rows//2 + 300, self.cols//2 + 300],
+        #                      [self.rows//2, self.cols//2],
+        #                      [self.rows//2 + 350, self.cols//2 - 150],
+        #                      [self.rows//2 - 330, self.cols//2 + 280],
+        #                      [self.rows//2 - 0, self.cols//2 - 300]
+        #                     ]
         self.calibration_mask = np.ones((self.rows, self.cols), dtype=np.uint8) * self.OFF
         self.calibration_mask[self.calib_points[0][0] - delta : self.calib_points[0][0] + delta, 
                               self.calib_points[0][1] - delta : self.calib_points[0][1] + delta] = self.ON
@@ -232,7 +258,7 @@ class dmd():
         for i in range(1, len(self.viewer.layers)):
             mask = np.zeros((self.target_proj.shape), dtype=np.uint16)
             for shape in self.viewer.layers[i].data:
-                mask[int(shape[0][0]):int(shape[2][0]), int(shape[0][1]):int(shape[2][1])] = 1
+                mask[int(shape[0][0]):int(shape[2][0]), int(shape[0][1]):int(shape[2][1])] = 1 # temporary fix?
             
             imageio.imsave(self.save_dir + '\ROI_' + str(i) + '.png', mask)
 
@@ -335,6 +361,90 @@ class dmd():
         self.ref_norm, norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
                     np.load(self.parameters['params_folder'] + PARAMETERS_FILENAME, allow_pickle=True)['parameters_list']
     
+
+    def project_grid(self):
+        grid_x, grid_y = np.arange(100, 1100, 30), np.arange(100, 1820, 30)
+        self.grid_mask = np.ones((1200, 1920), dtype=np.uint8) * 255
+        delta = 2
+        for pointx in grid_x:
+            for pointy in grid_y:
+                self.grid_mask[pointx - delta: pointx + delta, pointy - delta: pointy + delta] = 0
+        return None
+    
+    def find_affine_2(self, image, show=False):
+
+        calib = imageio.imread(image)
+        # remove light from DMD border, which is very bright and would not allow proper maxima identifiation
+        calib[:700, :] *= 0
+        calib[:, :500] *= 0
+        calib[1800:, :] *= 0
+        calib[:, 1900:] *= 0
+        # calib = calib[:, ::-1] # DMD pattern is mirrored by the optical system
+        tops = [] # maxima
+        for i in range(5):
+            tops.append(np.unravel_index(np.argmax(calib), (calib.shape)))
+            calib = mt.cookiecutter(calib, tops[i], 30) # 30 pixels should beenoguh to get rid of the spot around each max
+        tops = np.asarray(tops) # tops are experimental points
+        camera, camera_center_x, camera_center_y = mt.center(tops) # experimental ponts
+
+        centering = np.asarray([[self.hrows, self.hcols],[self.hrows, self.hcols],[self.hrows, self.hcols],
+                                [self.hrows, self.hcols],[self.hrows, self.hcols]])
+        
+        xp_points = tops - centering
+
+
+
+
+        #     # center the point clouds around their center of mass
+        
+        # dmd, dmd_center_x, dmd_center_y = mt.center(self.calib_points) # Theoretical points
+
+
+
+        # # center the point clouds around their center of mass
+        # camera, camera_center_x, camera_center_y = mt.center(tops) # experimental ponts
+        # dmd, dmd_center_x, dmd_center_y = mt.center(self.calib_points) # Theoretical points
+        # # Calculate norm of reference
+        # ref_norm = np.linalg.norm(dmd)
+        # norm = np.linalg.norm(camera)
+        # camera = ref_norm/norm * camera
+        # # System has a 45deg rotation. We can put this is and then refine the actual angle with a fit
+        # rotation_matrix = np.array([[np.cos(np.pi/4), -np.sin(np.pi/4)],
+        #                             [np.sin(np.pi/4), np.cos(np.pi/4)]])
+        # rotated_vectors = (rotation_matrix@camera.T).T
+        # if show:
+        #     plt.figure('Scaled and rotated 45')
+        #     plt.scatter(dmd[:, 0], dmd[:, 1], s=100, label='DMD')
+        #     plt.scatter(rotated_vectors[:, 0], rotated_vectors[:, 1], alpha=.4, s=400, label='Camera')
+        #     plt.legend()
+        #     plt.grid(alpha=.2)
+        #     plt.show()
+        # rotated_vectors = np.sort(rotated_vectors.astype(np.int16), axis=0)
+        # dmd = np.sort(dmd, axis=0)
+        # # The fit to reffine the (small) rotation angle:
+        # res = opt.minimize(mt.letter_rotation, 0, args=(dmd, rotated_vectors), method="L-BFGS-B")
+        # theta = res.x[0]
+        # rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)],
+        #                             [np.sin(theta), np.cos(theta)]])
+        # rotated_vectors = (rotation_matrix@rotated_vectors.T).T
+        # if show:
+        #     plt.figure('Small angle rotation')
+        #     plt.scatter(dmd[:, 0], dmd[:, 1], s=100, label='DMD')
+        #     plt.scatter(rotated_vectors[:, 0], rotated_vectors[:, 1], s=400, alpha=.4,  label='Camera')
+        #     plt.show()
+
+        # rotation_matrix = np.array([[np.cos(np.pi/4 + theta), -np.sin(np.pi/4 + theta)],
+        #                             [np.sin(np.pi/4 + theta), np.cos(np.pi/4 + theta)]])
+        # print(rotation_matrix)
+        
+        # parameters_list = [ref_norm, norm, rotation_matrix, camera_center_x, camera_center_y, dmd_center_x, dmd_center_y]
+
+        # parameters_list = np.asarray(parameters_list, dtype=object)
+        # np.savez(self.parameters['params_folder'] + PARAMETERS_FILENAME, parameters_list=parameters_list)
+        # # by default the affine transform parameters
+        # self.ref_norm, norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
+        #             np.load(self.parameters['params_folder'] + PARAMETERS_FILENAME, allow_pickle=True)['parameters_list']
+    
     def apply_affine(self, image, output_name):
         """
         Image is already a numpy matrix
@@ -374,3 +484,84 @@ class dmd():
 
         imageio.imwrite(output_name, DMD_mask_save)
         return DMD_mask
+
+    # def draw_calib_points(self):
+    #     image = np.ones(((self.dark.shape)))
+    #     image[400:900, 500:1400] = 0
+    #     self.theoretical_points = []
+    #     self.viewer = nap.Viewer()
+    #     self.viewer.add_image(image, name='DMD input image')
+    #     nap.run()
+
+    # def record_theoretical_points(self, delta=2):
+    #     self.user_calibration_mask = np.ones((self.rows, self.cols), dtype=np.uint8) * self.OFF
+    #     for point in self.viewer.layers[1].data:
+    #         print(point)
+    #         self.theoretical_points.append(point) # ORDER is important. Check notes on how to draw the points.
+    #         self.user_calibration_mask[int(point[0] - delta) : int(point[0] + delta),
+    #                                    int(point[1] - delta) : int(point[1] + delta)
+    #                                    ] = self.ON # write mask to project
+
+    # def select_calibration_points(self, image):
+    #     self.experimental_points = []
+    #     self.viewer = nap.Viewer() # rewritten to be sure nothing is still used
+    #     # if not self.user_calibration_mask:
+    #     #     print("\nThere's not calibration mask yet\n")
+    #     #     return None
+    #     self.viewer.add_image(image)
+    #     nap.run()
+        
+    # def find_calibration_points(self):
+    #     for point in self.viewer.layers[1].data:
+    #         self.experimental_points.append(point) # ORDER is important. Check notes on how to draw the points.
+    
+    # def find_affine_from_user_input(self, show=True):
+
+    #     # center the point clouds around their center of mass
+    #     camera, camera_center_x, camera_center_y = mt.center(np.asarray(self.experimental_points)) # experimental ponts
+    #     dmd, dmd_center_x, dmd_center_y = mt.center(np.asarray(self.theoretical_points)) # Theoretical points
+
+    #     # Calculate norm of reference
+    #     ref_norm = np.linalg.norm(dmd)
+    #     norm = np.linalg.norm(camera)
+    #     camera = ref_norm/norm * camera
+
+    #     # System has a 45deg rotation. We can put this is and then refine the actual angle with a fit
+    #     rotation_matrix = np.array([[np.cos(np.pi/4), -np.sin(np.pi/4)],
+    #                                 [np.sin(np.pi/4), np.cos(np.pi/4)]])
+    #     rotated_vectors = (rotation_matrix@camera.T).T
+
+    #     if show:
+    #         plt.figure('Scaled and rotated 45')
+    #         plt.scatter(dmd[:, 0], dmd[:, 1], s=100, label='DMD')
+    #         plt.scatter(rotated_vectors[:, 0], rotated_vectors[:, 1], alpha=.4, s=400, label='Camera')
+    #         plt.legend()
+    #         plt.grid(alpha=.2)
+    #         plt.show()
+    #     rotated_vectors = np.sort(rotated_vectors.astype(np.int16), axis=0)
+    #     dmd = np.sort(dmd, axis=0)
+    #     # The fit to reffine the (small) rotation angle:
+    #     res = opt.minimize(mt.letter_rotation, 0, args=(dmd, rotated_vectors), method="L-BFGS-B")
+    #     theta = res.x[0]
+    #     rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)],
+    #                                 [np.sin(theta), np.cos(theta)]])
+    #     rotated_vectors = (rotation_matrix@rotated_vectors.T).T
+    #     if show:
+    #         plt.figure('Small angle rotation')
+    #         plt.scatter(dmd[:, 0], dmd[:, 1], s=100, label='DMD')
+    #         plt.scatter(rotated_vectors[:, 0], rotated_vectors[:, 1], s=400, alpha=.4,  label='Camera')
+    #         plt.show()
+
+    #     rotation_matrix = np.array([[np.cos(np.pi/4 + theta), -np.sin(np.pi/4 + theta)],
+    #                                 [np.sin(np.pi/4 + theta), np.cos(np.pi/4 + theta)]])
+    #     print(rotation_matrix)
+        
+    #     parameters_list = [ref_norm, norm, rotation_matrix, camera_center_x, camera_center_y, dmd_center_x, dmd_center_y]
+
+    #     parameters_list = np.asarray(parameters_list, dtype=object)
+    #     np.savez(self.parameters['params_folder'] + PARAMETERS_FILENAME, parameters_list=parameters_list)
+    #     # by default the affine transform parameters
+    #     self.ref_norm, norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
+    #                 np.load(self.parameters['params_folder'] + PARAMETERS_FILENAME, allow_pickle=True)['parameters_list']
+    #     return None
+

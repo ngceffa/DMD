@@ -244,7 +244,7 @@ class dmd():
         for i in range(1, len(self.viewer.layers)):
             mask = np.zeros((self.target_proj.shape), dtype=np.uint16)
             for shape in self.viewer.layers[i].data:
-                mask[int(shape[0][0]):int(shape[2][0]), int(shape[0][1]):int(shape[2][1])] = 1
+                mask[int(shape[0][0]):int(shape[2][0]), int(shape[0][1]):int(shape[2][1])] = 1 
 
             self.apply_affine(mask, self.save_dir + '\mask_' + str(i) + '.png' )
             self.rois.append(mask)
@@ -399,6 +399,94 @@ class dmd():
         # by default the affine transform parameters
         self.ref_norm, norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
                     np.load(self.parameters['params_folder'] + PARAMETERS_FILENAME, allow_pickle=True)['parameters_list']
+
+
+    def find_affine_2(self, image, show=False):
+        """Calibrate the affine transform to connect DMD and image spaces"""
+        calib = imageio.imread(image)
+        # remove light from DMD border, which is very bright and would not allow proper maxima identifiation
+        calib[:700, :] *= 0
+        calib[:, :500] *= 0
+        calib[1800:, :] *= 0
+        calib[:, 1900:] *= 0
+        calib = calib[:, ::-1] # DMD pattern is mirrored by the optical system
+        tops = [] # maxima
+        for i in range(5):
+            tops.append(np.unravel_index(np.argmax(calib), (calib.shape)))
+            calib = mt.cookiecutter(calib, tops[i], 30) # 30 pixels should beenoguh to get rid of the spot around each max
+        # tops = np.asarray(tops)
+        # center the point clouds around their center of mass
+        camera, camera_center_x, camera_center_y = mt.center(tops) # experimental ponts
+        dmd, dmd_center_x, dmd_center_y = mt.center(self.calib_points) # Theoretical points
+
+
+
+
+        tops = np.asarray(tops[0] - 1152, tops[1] - 1152)
+        theory = []
+        for point in self.calib_points:
+            theory.append(point[0] - self.rows/2, point[1] - self.cols/2)
+        theory = np.asarray(theory)
+        # System has a 45deg rotation. We can put this is and then refine the actual angle with a fit
+        rotation_matrix = np.array([[np.cos(np.pi/4), -np.sin(np.pi/4)],
+                                    [np.sin(np.pi/4), np.cos(np.pi/4)]])
+        
+        rotated_vectors = (rotation_matrix@theory)
+
+        # tbc
+        
+
+
+
+
+        
+
+
+
+
+
+
+
+        # # Calculate norm of reference
+        # ref_norm = np.linalg.norm(dmd)
+        # norm = np.linalg.norm(camera)
+        # camera = ref_norm/norm * camera
+        # # System has a 45deg rotation. We can put this is and then refine the actual angle with a fit
+        # rotation_matrix = np.array([[np.cos(np.pi/4), -np.sin(np.pi/4)],
+        #                             [np.sin(np.pi/4), np.cos(np.pi/4)]])
+        # rotated_vectors = (rotation_matrix@camera.T).T
+        # if show:
+        #     plt.figure('Scaled and rotated 45')
+        #     plt.scatter(dmd[:, 0], dmd[:, 1], s=100, label='DMD')
+        #     plt.scatter(rotated_vectors[:, 0], rotated_vectors[:, 1], alpha=.4, s=400, label='Camera')
+        #     plt.legend()
+        #     plt.grid(alpha=.2)
+        #     plt.show()
+        # rotated_vectors = np.sort(rotated_vectors.astype(np.int16), axis=0)
+        # dmd = np.sort(dmd, axis=0)
+        # # The fit to reffine the (small) rotation angle:
+        # res = opt.minimize(mt.letter_rotation, 0, args=(dmd, rotated_vectors), method="L-BFGS-B")
+        # theta = res.x[0]
+        # rotation_matrix = np.array([[np.cos(theta), -np.sin(theta)],
+        #                             [np.sin(theta), np.cos(theta)]])
+        # rotated_vectors = (rotation_matrix@rotated_vectors.T).T
+        # if show:
+        #     plt.figure('Small angle rotation')
+        #     plt.scatter(dmd[:, 0], dmd[:, 1], s=100, label='DMD')
+        #     plt.scatter(rotated_vectors[:, 0], rotated_vectors[:, 1], s=400, alpha=.4,  label='Camera')
+        #     plt.show()
+
+        # rotation_matrix = np.array([[np.cos(np.pi/4 + theta), -np.sin(np.pi/4 + theta)],
+        #                             [np.sin(np.pi/4 + theta), np.cos(np.pi/4 + theta)]])
+        # print(rotation_matrix)
+        
+        # parameters_list = [ref_norm, norm, rotation_matrix, camera_center_x, camera_center_y, dmd_center_x, dmd_center_y]
+
+        # parameters_list = np.asarray(parameters_list, dtype=object)
+        # np.savez(self.parameters['params_folder'] + PARAMETERS_FILENAME, parameters_list=parameters_list)
+        # # by default the affine transform parameters
+        # self.ref_norm, norm, self.rotation_matrix, self.center_x, self.center_y, self.ref_center_x, self.ref_center_y = \
+        #             np.load(self.parameters['params_folder'] + PARAMETERS_FILENAME, allow_pickle=True)['parameters_list']
     
     def apply_affine(self, image, output_name):
         """

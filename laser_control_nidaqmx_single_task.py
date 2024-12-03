@@ -17,7 +17,7 @@ from random import shuffle
 # ------------------------------------------------------------------------------
 class analogOut(object):
     
-    def __init__(self, device_name='Dev1', channels=['ao0', 'ao1'], save_path=r'D:\Data' ):
+    def __init__(self, device_name='Dev2', channels=['ao0', 'ao1'], save_path=r'D:\Data' ):
     
         """ Constructor:
                 - device_name = obvious;
@@ -35,7 +35,7 @@ class analogOut(object):
             self.task.ao_channels.add_ao_voltage_chan(device_name + '/'+ i)
 # ------------------------------------------------------------------------------
     def constant(self, value=0):
-        assert(value <= 3.), '\n max output 3V: you put   %f' %value
+        assert(value <= 4.), '\n max output 3V: you put   %f' %value
         if value > 0:
             self.task.write([value, 5])
             print('DMD ON,  input voltage %f \n' %value)
